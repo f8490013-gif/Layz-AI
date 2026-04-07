@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PromptForge • lazy input → precise output</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@400;700&family=Syne:wght@700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0A0A0B;
+            --surface: #111114;
+            --border: #222228;
+            --accent: #E6C37A;
+            --text: #F0EDE8;
+            --muted: #6B6B75;
+            --green: #4ADE80;
+            --error: #ff6b6b;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Space Mono', monospace;
+            line-height: 1.5;
+            padding: 2rem 1rem;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            overflow-x: hidden;
+        }
+        
+        /* Subtle noise texture */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: -1;
+            opacity: 0.6;
+        }
+        
+        .container { max-width: 800px; width: 100%; margin: 0 auto; }
+        
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'Syne', sans-serif;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -1px;
+        }
+        
+        .tagline {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 4px;
+            letter-spacing: 1px;
+        }
+        
+        .gear {
+            width: 36px;
+            height: 36px;
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .gear:hover {
+            border-color: var(--accent);
+            transform: rotate(45deg);
+        }
+        
+        .main-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 32px;
+            box-shadow: 0 0 0 1px rgba(230, 195, 122, 0.08),
+                        0 20px 40px -10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .section { margin-bottom: 32px; }
+        .section:last-child { margin-bottom: 0; }
+        
+        .label {
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--muted);
+            margin-bottom: 12px;
+            display: block;
+        }
+        
+        .pills {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .pill {
+            padding: 10px 24px;
+            border-radius: 9999px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text);
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            white-space: nowrap;
+        }
+        
+        .pill.active {
+            background: var(--accent);
+            color: #111114;
+            border-color: var(--accent);
+        }
+        
+        .textarea-label {
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--muted);
+            margin-bottom: 12px;
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 140px;
+            background: #0A0A0B;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            color: var(--text);
+            font-family: 'Space Mono', monospace;
+            font-size: 15px;
+            line-height: 1.6;
+            resize: vertical;
+            outline: none;
+            transition: all 0.2s;
+        }
+        
+        textarea:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(230, 195, 122, 0.15);
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+            20%, 40%, 60%, 80% { transform: translateX(4px); }
+        }
+        
+        .shake { animation: shake 0.4s cubic-bezier(0.36, 0, 0.66, -0.56) both; }
+        
+        .forge-btn {
+            width: 100%;
+            height: 68px;
+            background: linear-gradient(90deg, #E6C37A, #F5D9A0);
+            color: #111114;
+            border: none;
+            border-radius: 9999px;
+            font-family: 'Syne', sans-serif;
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 10px 30px -10px rgba(230, 195, 122, 0.4);
+        }
+        
+        .forge-btn:hover { transform: translateY(-2px); box-shadow: 0 15px 35px -10px rgba(230, 195, 122, 0.5); }
+        .forge-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+        
+        .error-inline {
+            color: var(--error);
+            font-size: 14px;
+            margin-top: 12px;
+            text-align: center;
+            display: none;
+        }
+        
+        .warning {
+            background: rgba(255, 107, 107, 0.1);
+            color: var(--error);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 13px;
+            margin-top: 12px;
+            text-align: center;
+        }
+        
+        .output {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .output.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        .output-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        
+        .copy-btn {
+            background: transparent;
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            padding: 8px 20px;
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .copy-btn:hover {
+            background: var(--accent);
+            color: #111114;
+        }
+        
+        .count-badge {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 12px;
+            padding: 4px 12px;
+            border-radius: 9999px;
+        }
+        
+        .api-panel {
+            position: absolute;
+            top: 80px;
+            right: 40px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            width: 340px;
+            padding: 24px;
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.4);
+            display: none;
+            flex-direction: column;
+            gap: 16px;
+            z-index: 50;
+        }
+        
+        .api-panel.show { display: flex; }
+        
+        .footer {
+            margin-top: 3rem;
+            text-align: center;
+            font-size: 12px;
+            color: var(--muted);
+            opacity: 0.6;
+        }
+        
+        .success { color: var(--green); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <div class="logo">PromptForge <span style="font-size: 28px;">⚡️</span></div>
+                <div class="tagline">lazy input → precise output</div>
+            </div>
+            <div class="gear" id="gear-btn" title="Manage Anthropic API key">⚙️</div>
+        </header>
+
+        <div class="main-card">
+            <!-- TARGET AI -->
+            <div class="section">
+                <span class="label">TARGET AI TOOL</span>
+                <div class="pills" id="target-pills">
+                    <div class="pill active" data-value="Cursor">Cursor</div>
+                    <div class="pill" data-value="Claude">Claude</div>
+                    <div class="pill" data-value="ChatGPT">ChatGPT</div>
+                    <div class="pill" data-value="v0">v0</div>
+                    <div class="pill" data-value="Bolt">Bolt</div>
+                </div>
+            </div>
+
+            <!-- TASK TYPE -->
+            <div class="section">
+                <span class="label">TASK TYPE</span>
+                <div class="pills" id="type-pills">
+                    <div class="pill active" data-value="Bug Fix">Bug Fix</div>
+                    <div class="pill" data-value="New Feature">New Feature</div>
+                    <div class="pill" data-value="UI Change">UI Change</div>
+                    <div class="pill" data-value="Database">Database</div>
+                    <div class="pill" data-value="Backend">Backend</div>
+                    <div class="pill" data-value="Full Stack">Full Stack</div>
+                </div>
+            </div>
+
+            <!-- LAZY INPUT -->
+            <div class="section">
+                <label class="textarea-label">DESCRIBE YOUR TASK (LAZILY)</label>
+                <textarea id="lazy-input" placeholder='e.g. "make a login page" or "fix the button that breaks on mobile"'></textarea>
+            </div>
+
+            <!-- FORGE BUTTON -->
+            <button class="forge-btn" id="forge-btn">
+                <span id="forge-text">⚡️ FORGE PROMPT</span>
+            </button>
+            
+            <div id="api-warning" class="warning" style="display: none;">
+                ⚠️ Please set your Anthropic API key using the gear icon above
+            </div>
+            
+            <div id="error-message" class="error-inline"></div>
+
+            <!-- OUTPUT -->
+            <div id="output-section" class="output section" style="margin-top: 40px;">
+                <div class="output-header">
+                    <span class="label" style="margin-bottom: 0;">YOUR FORGED PROMPT — ready to paste</span>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span id="count-badge" class="count-badge">0 words • 0 chars</span>
+                        <button class="copy-btn" id="copy-btn">COPY PROMPT</button>
+                    </div>
+                </div>
+                <textarea id="output-text" readonly></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- API KEY PANEL -->
+    <div id="api-panel" class="api-panel">
+        <div style="font-family: 'Syne', sans-serif; font-size: 18px; margin-bottom: 8px;">Anthropic API Key</div>
+        <input type="password" id="api-key-input" placeholder="sk-ant-..." 
+               style="width: 100%; background: #0A0A0B; border: 1px solid #222228; border-radius: 12px; padding: 16px; color: #F0EDE8; font-family: 'Space Mono', monospace;">
+        <button id="save-key-btn"
+                style="width: 100%; height: 52px; background: #E6C37A; color: #111114; border: none; border-radius: 9999px; font-weight: 700; font-size: 16px;">
+            SAVE KEY
+        </button>
+        <div style="font-size: 12px; color: var(--muted); text-align: center;">
+            Stored only in your browser (localStorage)<br>
+            Never sent anywhere except <span style="color: #E6C37A;">api.anthropic.com</span>
+        </div>
+        <div id="key-status" style="font-size: 13px; text-align: center; margin-top: 4px;"></div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        PromptForge — built with Claude © <span id="current-year"></span>
+    </div>
+
+    <script>
+        // ====================== CONFIG ======================
+        const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+        const MODEL = "claude-sonnet-4-20250514";
+        
+        const SYSTEM_PROMPT = `You are PromptForge, an expert prompt engineer specializing in AI coding assistants.
+
+Your job is to transform a short, vague coding task description into a precise, professional prompt optimized for the target AI tool.
+
+FORMAT RULES BY TARGET:
+- Cursor: Use @file references, mention context files, specify edits vs new files
+- Claude: Structured with clear sections, include "think step by step" instruction
+- ChatGPT: Direct imperative style, numbered steps, ask for complete code blocks
+- v0: Focus on component name, props, Tailwind styling, shadcn/ui compatibility
+- Bolt: Specify full project structure, list all files to create, mention tech stack clearly
+
+TASK TYPE MODIFIERS:
+- Bug Fix: Include "do not change unrelated code", ask to explain root cause first
+- New Feature: Ask for a plan before code, include integration points
+- UI Change: Mention responsive design, accessibility, dark/light mode if relevant
+- Database: Specify ORM or raw SQL, include migration instructions
+- Backend: Mention API contract, error handling, auth considerations
+- Full Stack: Break into frontend + backend sections, mention deployment
+
+The forged prompt must include:
+1. A clear, specific task statement
+2. Relevant technical context and assumptions (stack, file types, conventions)
+3. Constraints and edge cases to handle
+4. Expected output format (what files to create/edit, what the result should look like)
+5. Any relevant instructions specific to the target tool
+
+Output ONLY the forged prompt — no preamble, no explanation, no markdown wrapper.
+The prompt should be ready to paste directly. Length: 150–400 words.`;
+
+        // ====================== STATE ======================
+        let currentTarget = "Cursor";
+        let currentType = "Bug Fix";
+        let apiKey = localStorage.getItem("anthropicKey") || "";
+
+        // ====================== DOM ======================
+        const forgeBtn = document.getElementById("forge-btn");
+        const forgeText = document.getElementById("forge-text");
+        const lazyInput = document.getElementById("lazy-input");
+        const outputSection = document.getElementById("output-section");
+        const outputText = document.getElementById("output-text");
+        const copyBtn = document.getElementById("copy-btn");
+        const countBadge = document.getElementById("count-badge");
+        const gearBtn = document.getElementById("gear-btn");
+        const apiPanel = document.getElementById("api-panel");
+        const apiKeyInput = document.getElementById("api-key-input");
+        const saveKeyBtn = document.getElementById("save-key-btn");
+        const keyStatus = document.getElementById("key-status");
+        const apiWarning = document.getElementById("api-warning");
+        const errorMessage = document.getElementById("error-message");
+        const currentYearEl = document.getElementById("current-year");
+
+        // ====================== HELPERS ======================
+        function updateApiWarning() { apiWarning.style.display = apiKey ? "none" : "block"; }
+        
+        function shakeInput() {
+            lazyInput.classList.add("shake");
+            setTimeout(() => lazyInput.classList.remove("shake"), 500);
+            lazyInput.style.borderColor = "#ff6b6b";
+            setTimeout(() => { lazyInput.style.borderColor = ""; }, 800);
+        }
+        
+        function autoResizeTextarea(ta) {
+            ta.style.height = 'auto';
+            ta.style.height = ta.scrollHeight + 'px';
+        }
+        
+        function showError(msg) {
+            errorMessage.textContent = msg;
+            errorMessage.style.display = 'block';
+        }
+        
+        function hideError() { errorMessage.style.display = 'none'; }
+
+        // ====================== PILLS ======================
+        document.getElementById("target-pills").addEventListener("click", e => {
+            if (e.target.classList.contains("pill")) {
+                document.querySelectorAll("#target-pills .pill").forEach(p => p.classList.remove("active"));
+                e.target.classList.add("active");
+                currentTarget = e.target.dataset.value;
+            }
+        });
+        
+        document.getElementById("type-pills").addEventListener("click", e => {
+            if (e.target.classList.contains("pill")) {
+                document.querySelectorAll("#type-pills .pill").forEach(p => p.classList.remove("active"));
+                e.target.classList.add("active");
+                currentType = e.target.dataset.value;
+            }
+        });
+
+        // ====================== API KEY ======================
+        function loadApiKey() {
+            if (apiKey) {
+                apiKeyInput.value = apiKey;
+                keyStatus.innerHTML = `<span class="success">✓ Key loaded</span>`;
+            }
+            updateApiWarning();
+        }
+        
+        gearBtn.addEventListener("click", () => {
+            apiPanel.classList.toggle("show");
+            if (apiPanel.classList.contains("show")) apiKeyInput.focus();
+        });
+        
+        document.addEventListener("click", e => {
+            if (!apiPanel.contains(e.target) && e.target !== gearBtn) apiPanel.classList.remove("show");
+        });
+        
+        saveKeyBtn.addEventListener("click", () => {
+            const newKey = apiKeyInput.value.trim();
+            if (newKey) {
+                apiKey = newKey;
+                localStorage.setItem("anthropicKey", apiKey);
+                keyStatus.innerHTML = `<span class="success">✓ Saved securely</span>`;
+                updateApiWarning();
+                setTimeout(() => apiPanel.classList.remove("show"), 1000);
+            } else {
+                keyStatus.innerHTML = `<span style="color:#ff6b6b;">Enter a valid key</span>`;
+            }
+        });
+
+        // ====================== FORGE ======================
+        async function forgePrompt() {
+            hideError();
+            const lazyText = lazyInput.value.trim();
+            
+            if (!lazyText) { shakeInput(); return; }
+            if (!apiKey) { updateApiWarning(); apiPanel.classList.add("show"); return; }
+
+            forgeBtn.disabled = true;
+            forgeText.innerHTML = `⚡️ FORGING<span class="dots">...</span>`;
+            
+            const dots = document.querySelector('.dots');
+            let dotCount = 3;
+            const pulse = setInterval(() => {
+                dotCount = (dotCount % 3) + 1;
+                dots.textContent = '.'.repeat(dotCount);
+            }, 400);
+
+            try {
+                const userMessage = `Target tool: ${currentTarget}\nTask type: ${currentType}\nLazy description: ${lazyText}`;
+
+                const res = await fetch(ANTHROPIC_API_URL, {
+                    method: "POST",
+                    headers: {
+                        "x-api-key": apiKey,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                        "anthropic-dangerous-direct-browser-access": "true"
+                    },
+                    body: JSON.stringify({
+                        model: MODEL,
+                        max_tokens: 1500,
+                        temperature: 0.7,
+                        system: SYSTEM_PROMPT,
+                        messages: [{ role: "user", content: userMessage }]
+                    })
+                });
+
+                if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+
+                const data = await res.json();
+                const forged = data.content[0].text.trim();
+
+                outputText.value = forged;
+                autoResizeTextarea(outputText);
+                outputSection.classList.add("show");
+                
+                const words = forged.split(/\s+/).filter(Boolean).length;
+                countBadge.textContent = `${words} words • ${forged.length} chars`;
+                
+                outputSection.scrollIntoView({ behavior: "smooth", block: "center" });
+            } catch (err) {
+                let msg = err.message.includes("401") ? "Invalid API key. Check the gear icon." : err.message;
+                showError("⚠️ " + msg);
+            } finally {
+                clearInterval(pulse);
+                forgeBtn.disabled = false;
+                forgeText.innerHTML = `⚡️ FORGE PROMPT`;
+            }
+        }
+
+        // ====================== COPY ======================
+        copyBtn.addEventListener("click", async () => {
+            const text = outputText.value;
+            if (!text) return;
+            await navigator.clipboard.writeText(text);
+            const original = copyBtn.textContent;
+            copyBtn.textContent = "✓ COPIED!";
+            copyBtn.style.color = "#4ADE80";
+            setTimeout(() => { copyBtn.textContent = original; copyBtn.style.color = ""; }, 2000);
+        });
+
+        // ====================== KEYBOARD ======================
+        document.addEventListener("keydown", e => {
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                forgePrompt();
+            }
+        });
+
+        // ====================== INIT ======================
+        function init() {
+            loadApiKey();
+            currentYearEl.textContent = new Date().getFullYear();
+            outputText.addEventListener("input", () => autoResizeTextarea(outputText));
+            forgeBtn.addEventListener("click", forgePrompt);
+            console.log("%c🚀 PromptForge ready for Railway deployment", "color:#E6C37A; font-family:Space Mono");
+        }
+        
+        window.onload = init;
+    </script>
+</body>
+</html>
